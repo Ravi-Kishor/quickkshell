@@ -29,20 +29,26 @@ jobs:
       - name: Setup CachyOS repo
         run: |
           pacman-key --init
-
           curl -L https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
           tar -xf cachyos-repo.tar.xz
           cd cachyos-repo
           chmod +x cachyos-repo.sh
           yes | ./cachyos-repo.sh
-
           pacman -Syyu --noconfirm
 
       # -------------------------
-      # Enable x86-64-v3 optimization
+      # Force Release + Strip + v3
       # -------------------------
-      - name: Enable x86-64-v3 build flags
+      - name: Configure build flags
         run: |
+          # Enable stripping
+          sed -i 's/^OPTIONS=.*/OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge debug)/' /etc/makepkg.conf
+
+          # Clear debug flags
+          sed -i 's/^DEBUG_CFLAGS=.*/DEBUG_CFLAGS=""/' /etc/makepkg.conf
+          sed -i 's/^DEBUG_CXXFLAGS=.*/DEBUG_CXXFLAGS=""/' /etc/makepkg.conf
+
+          # Force v3 optimization
           sed -i 's/-march=x86-64/-march=x86-64-v3/' /etc/makepkg.conf
 
       # -------------------------
@@ -75,14 +81,10 @@ jobs:
         run: |
           PKG_PATH=$(ls /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst)
           PKG_FILE=$(basename "$PKG_PATH")
-
-          VERSION=$(echo "$PKG_FILE" | sed -E 's/^quickshell-git-([^-]+)-.*/\1/')
-
+          VERSION=$(echo "$PKG_FILE" | sed -E 's/^quickshell-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
           echo "Detected version: $VERSION"
-
           mkdir release
           cp "$PKG_PATH" release/
-
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # -------------------------
@@ -95,7 +97,7 @@ jobs:
           path: release/*.pkg.tar.zst
 
       # -------------------------
-      # Create GitHub Release (versioned)
+      # Create GitHub Release
       # -------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
