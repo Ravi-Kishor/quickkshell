@@ -5,7 +5,7 @@ REPO="Ravi-Kishor/quickkshell"
 PKG_NAME="quickshell-git"
 
 require() {
-  command -v "$1" >/dev/null || {
+  command -v "$1" >/dev/null 2>&1 || {
     echo "❌ Required command '$1' not found"
     exit 1
   }
@@ -17,16 +17,12 @@ require sudo
 require pacman
 
 get_installed_version() {
-  if command -v quickshell >/dev/null 2>&1; then
-    quickshell --version | awk '{print $2}'
-  else
-    echo "Not Installed"
-  fi
+  pacman -Q "$PKG_NAME" 2>/dev/null | awk '{print $2}' || echo "Not Installed"
 }
 
 INSTALLED_VERSION=$(get_installed_version)
 
-echo "Installed quickshell version: $INSTALLED_VERSION"
+echo "Installed package version: $INSTALLED_VERSION"
 echo "📡 Fetching latest release metadata…"
 
 RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
@@ -46,9 +42,11 @@ if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
 fi
 
 PKG_FILE=$(basename "$ASSET_URL")
-LATEST_VERSION=$(echo "$PKG_FILE" | sed -E 's/^quickshell-git-([^-]+)-.*/\1/')
 
-echo "Latest quickshell package version: $LATEST_VERSION"
+LATEST_VERSION=$(echo "$PKG_FILE" | sed -E \
+  's/^quickshell-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
+
+echo "Latest package version: $LATEST_VERSION"
 echo
 
 echo "Choose an action:"
