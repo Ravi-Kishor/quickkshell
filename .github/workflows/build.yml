@@ -37,21 +37,6 @@ jobs:
           pacman -Syyu --noconfirm
 
       # -------------------------
-      # Force Release + Strip + v3
-      # -------------------------
-      - name: Configure build flags
-        run: |
-          # Enable stripping
-          sed -i 's/^OPTIONS=.*/OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge debug)/' /etc/makepkg.conf
-
-          # Clear debug flags
-          sed -i 's/^DEBUG_CFLAGS=.*/DEBUG_CFLAGS=""/' /etc/makepkg.conf
-          sed -i 's/^DEBUG_CXXFLAGS=.*/DEBUG_CXXFLAGS=""/' /etc/makepkg.conf
-
-          # Force v3 optimization
-          sed -i 's/-march=x86-64/-march=x86-64-v3/' /etc/makepkg.conf
-
-      # -------------------------
       # Create builder user
       # -------------------------
       - name: Create builder user
