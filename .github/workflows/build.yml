@@ -1,0 +1,96 @@
+name: Build quickshell-git (Arch + CachyOS + v3)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/archlinux/archlinux:latest
+
+    steps:
+      # -------------------------
+      # Base system
+      # -------------------------
+      - name: Update base system
+        run: |
+          pacman -Syyu --noconfirm
+          pacman -S --noconfirm base-devel git sudo curl tar
+
+      # -------------------------
+      # Setup CachyOS repo
+      # -------------------------
+      - name: Setup CachyOS repo
+        run: |
+          pacman-key --init
+
+          curl -L https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
+          tar -xf cachyos-repo.tar.xz
+          cd cachyos-repo
+          chmod +x cachyos-repo.sh
+          yes | ./cachyos-repo.sh
+
+          pacman -Syyu --noconfirm
+
+      # -------------------------
+      # Enable x86-64-v3 optimization
+      # -------------------------
+      - name: Enable x86-64-v3 build flags
+        run: |
+          sed -i 's/-march=x86-64/-march=x86-64-v3/' /etc/makepkg.conf
+
+      # -------------------------
+      # Create builder user
+      # -------------------------
+      - name: Create builder user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      # -------------------------
+      # Install paru
+      # -------------------------
+      - name: Install paru
+        run: |
+          pacman -S --noconfirm paru
+
+      # -------------------------
+      # Build quickshell-git
+      # -------------------------
+      - name: Build quickshell-git
+        run: |
+          su builder -c "paru -S --noconfirm --needed quickshell-git"
+
+      # -------------------------
+      # Verify package
+      # -------------------------
+      - name: Locate built package
+        run: |
+          ls -lh /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst
+
+      # -------------------------
+      # Upload artifact
+      # -------------------------
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickshell-git-arch-v3
+          path: /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst
+
+
+      - name: Prepare release file
+        run: |
+          mkdir release
+          cp /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: quickshell-git (latest build)
+          files: release/*.pkg.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
