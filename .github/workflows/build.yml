@@ -1,5 +1,8 @@
 name: Build quickshell-git
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   schedule:
@@ -65,32 +68,40 @@ jobs:
           su builder -c "paru -S --noconfirm --needed quickshell-git"
 
       # -------------------------
-      # Verify package
+      # Extract version + prepare release
       # -------------------------
-      - name: Locate built package
+      - name: Prepare release
+        id: pkg
         run: |
-          ls -lh /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst
+          PKG_PATH=$(ls /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst)
+          PKG_FILE=$(basename "$PKG_PATH")
+
+          VERSION=$(echo "$PKG_FILE" | sed -E 's/^quickshell-git-([^-]+)-.*/\1/')
+
+          echo "Detected version: $VERSION"
+
+          mkdir release
+          cp "$PKG_PATH" release/
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # -------------------------
-      # Upload artifact
+      # Upload artifact (optional)
       # -------------------------
-      - name: Upload Arch package
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quickshell-git-arch-v3
-          path: /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst
+          name: quickshell-git-${{ steps.pkg.outputs.version }}
+          path: release/*.pkg.tar.zst
 
-
-      - name: Prepare release file
-        run: |
-          mkdir release
-          cp /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst release/
-
-      - name: Create Release
+      # -------------------------
+      # Create GitHub Release (versioned)
+      # -------------------------
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: quickshell-git (latest build)
+          tag_name: ${{ steps.pkg.outputs.version }}
+          name: quickshell-git ${{ steps.pkg.outputs.version }}
           files: release/*.pkg.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
