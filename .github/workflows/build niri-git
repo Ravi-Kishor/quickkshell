@@ -1,0 +1,156 @@
+name: Build niri-git (x86-64-v3)
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      # -------------------------
+      # Update system
+      # -------------------------
+      - name: Update base system
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git curl sudo
+
+      # -------------------------
+      # Install dependencies
+      # -------------------------
+      - name: Install dependencies
+        run: |
+          pacman -S --noconfirm \
+            cairo glib2 glibc libdisplay-info libinput \
+            libpipewire libxkbcommon mesa pango pixman \
+            seatd systemd-libs xdg-desktop-portal-impl \
+            clang rust
+
+      # -------------------------
+      # Create builder user
+      # -------------------------
+      - name: Create builder user
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      # -------------------------
+      # Create PKGBUILD
+      # -------------------------
+      - name: Create PKGBUILD
+        run: |
+          cat > /home/builder/PKGBUILD << 'EOF'
+          pkgname=niri-git
+          pkgver=0.0.0
+          pkgrel=1
+          pkgdesc="A scrollable-tiling Wayland compositor (git, x86-64-v3)"
+          arch=(x86_64)
+          url="https://github.com/YaLTeR/niri"
+          license=(GPL-3.0-or-later)
+
+          depends=(
+            cairo gcc-libs glib2 glibc libdisplay-info libinput
+            libpipewire libxkbcommon mesa pango pixman
+            seatd systemd-libs xdg-desktop-portal-impl
+          )
+
+          makedepends=(clang git rust)
+
+          provides=(niri wayland-compositor)
+          conflicts=(niri)
+
+          source=("git+$url.git")
+          sha512sums=('SKIP')
+
+          pkgver() {
+            cd niri
+            git describe --long --tags --abbrev=7 | sed 's/^v//;s/-/.r/;s/-/./'
+          }
+
+          prepare() {
+            cd niri
+            cargo fetch --locked --target "$(rustc --print host-tuple)"
+          }
+
+          build() {
+            cd niri
+
+            export NIRI_BUILD_COMMIT="$(git rev-parse --short HEAD)"
+
+            # x86-64-v3 optimization
+            export RUSTFLAGS="-C target-cpu=x86-64-v3"
+
+            cargo build --frozen --release --features default
+
+            for shell in bash fish zsh; do
+              cargo run --frozen --release --bin niri -- \
+                completions "$shell" > "$shell-completions"
+            done
+          }
+
+          check() {
+            cd niri
+            export XDG_RUNTIME_DIR="$(mktemp -d)"
+            export RAYON_NUM_THREADS=1
+            cargo test --all --exclude niri-visual-tests --frozen || true
+          }
+
+          package() {
+            cd niri
+
+            install -Dm755 target/release/niri "$pkgdir/usr/bin/niri"
+            install -Dm755 resources/niri-session "$pkgdir/usr/bin/niri-session"
+            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
+            install -Dm644 resources/niri.desktop -t "$pkgdir/usr/share/wayland-sessions/"
+            install -Dm644 resources/niri-portals.conf -t "$pkgdir/usr/share/xdg-desktop-portal/"
+            install -Dm644 resources/default-config.kdl README.md -t "$pkgdir/usr/share/doc/niri/"
+
+            install -Dm644 bash-completions "$pkgdir/usr/share/bash-completion/completions/niri"
+            install -Dm644 fish-completions "$pkgdir/usr/share/fish/vendor_completions.d/niri.fish"
+            install -Dm644 zsh-completions "$pkgdir/usr/share/zsh/site-functions/_niri"
+          }
+          EOF
+
+      # -------------------------
+      # Build package
+      # -------------------------
+      - name: Build niri-git
+        run: |
+          chown -R builder:builder /home/builder
+          su builder -c "cd ~ && makepkg -s --noconfirm"
+
+      # -------------------------
+      # Prepare release
+      # -------------------------
+      - name: Prepare release
+        id: pkg
+        run: |
+          PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
+          PKG_FILE=$(basename "$PKG_PATH")
+          VERSION=$(echo "$PKG_FILE" | sed -E 's/^niri-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
+          NEW_NAME="niri-git-${VERSION}-x86_64_v3.pkg.tar.zst"
+
+          mkdir release
+          cp "$PKG_PATH" "release/$NEW_NAME"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # Create GitHub Release
+      # -------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.version }}-v3
+          name: niri-git ${{ steps.pkg.outputs.version }} (x86-64-v3)
+          files: release/*.pkg.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
