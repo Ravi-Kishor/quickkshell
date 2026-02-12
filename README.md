@@ -16,7 +16,6 @@ No manual builds.
 
 Builds include:
 
-- x86_64
 - x86_64_v3 optimized builds (preferred)
 - Built from latest upstream Git
 - Automatically released via GitHub Actions
