@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="Ravi-Kishor/dms-shell-git"
+# Correct repo (where your releases actually live)
+REPO="Ravi-Kishor/quickkshell-git"
 PKG_NAME="dms-shell-git"
 
 require() {
@@ -28,15 +29,22 @@ echo "📡 Fetching latest release metadata…"
 RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
 
 TAG_NAME=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
+
+if [[ -z "$TAG_NAME" || "$TAG_NAME" == "null" ]]; then
+  echo "❌ No releases found in $REPO"
+  exit 1
+fi
+
 echo "Latest release tag: $TAG_NAME"
 
-# Prefer x86_64_v3, fallback to generic
+# Prefer x86_64_v3
 ASSET_URL=$(echo "$RELEASE_JSON" | jq -r '
   .assets[]
   | select(.name | test("^dms-shell-git-.*-x86_64_v3\\.pkg\\.tar\\.zst$"))
   | .browser_download_url
 ' | head -n1)
 
+# Fallback to generic
 if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
   ASSET_URL=$(echo "$RELEASE_JSON" | jq -r '
     .assets[]
@@ -70,6 +78,7 @@ cd "$TMP_DIR"
 
 echo "📥 Downloading:"
 echo "   $PKG_FILE"
+
 curl -L --fail -o "$PKG_FILE" "$ASSET_URL"
 
 echo "📦 Installing package..."
