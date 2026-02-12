@@ -70,10 +70,12 @@ jobs:
           package() {
             cd DankMaterialShell
 
+            # Install CLI
             install -Dm755 core/bin/dms "$pkgdir/usr/bin/dms"
 
-            mkdir -p "$pkgdir/usr/share/dms"
-            cp -r quickshell/* "$pkgdir/usr/share/dms/"
+            # Install shell to correct path (fixes doctor warnings)
+            mkdir -p "$pkgdir/usr/share/quickshell/dms"
+            cp -r quickshell/* "$pkgdir/usr/share/quickshell/dms/"
           }
           EOF
 
