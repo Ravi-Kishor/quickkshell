@@ -63,10 +63,7 @@ jobs:
 
           build() {
             cd DankMaterialShell/core
-
-            # Go x86-64-v3 optimization
             export GOAMD64=v3
-
             make
           }
 
@@ -95,8 +92,9 @@ jobs:
       - name: Prepare release
         id: pkg
         run: |
-          PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
+          PKG_PATH=$(find /home/builder -maxdepth 1 -type f -name "dms-git-*-x86_64.pkg.tar.zst" ! -name "*debug*")
           PKG_FILE=$(basename "$PKG_PATH")
+
           VERSION=$(echo "$PKG_FILE" | sed -E 's/^dms-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
           NEW_NAME="dms-git-${VERSION}-x86_64_v3.pkg.tar.zst"
 
