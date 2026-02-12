@@ -16,20 +16,24 @@ jobs:
 
     steps:
       # -------------------------
-      # Update system
+      # Enable testing repo + update
       # -------------------------
-      - name: Update base system
+      - name: Setup Arch (with testing)
         run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git curl sudo
+          echo -e "\n[testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+          pacman -Syyu --noconfirm
 
       # -------------------------
       # Install dependencies
       # -------------------------
       - name: Install dependencies
         run: |
-          pacman -S --noconfirm cairo glib2 glibc libdisplay-info libinput pipewire libpipewire libxkbcommon mesa pango pixman seatd systemd-libs xdg-desktop-portal-impl clang rust
-
+          pacman -S --noconfirm \
+            base-devel git sudo curl \
+            cairo glib2 glibc libdisplay-info libinput \
+            pipewire libpipewire libxkbcommon mesa pango pixman \
+            seatd systemd-libs xdg-desktop-portal-impl \
+            clang rust
 
       # -------------------------
       # Create builder user
@@ -55,7 +59,7 @@ jobs:
 
           depends=(
             cairo gcc-libs glib2 glibc libdisplay-info libinput
-            libpipewire libxkbcommon mesa pango pixman
+            pipewire libpipewire libxkbcommon mesa pango pixman
             seatd systemd-libs xdg-desktop-portal-impl
           )
 
@@ -84,6 +88,8 @@ jobs:
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
+
+            CFLAGS+=" -march=x86-64-v3"
 
             cargo build --frozen --release --features default
 
@@ -116,12 +122,13 @@ jobs:
           }
           EOF
 
+          chown -R builder:builder /home/builder
+
       # -------------------------
       # Build package
       # -------------------------
       - name: Build niri-git
         run: |
-          chown -R builder:builder /home/builder
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
       # -------------------------
