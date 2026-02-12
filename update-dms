@@ -58,25 +58,25 @@ LATEST_VERSION=$(echo "$PKG_FILE" | sed -E \
 echo "Latest package version: $LATEST_VERSION"
 echo
 
-echo "Choose an action:"
-echo "1) Update (skip if already latest)"
-echo "2) Force install"
-read -rp "Enter choice (1/2): " CHOICE
-
-if [[ "$CHOICE" == "1" ]]; then
-  if [[ "$INSTALLED_VERSION" == "$LATEST_VERSION" ]]; then
-    echo "✅ dms-shell-git is already up to date"
-    exit 0
-  fi
-  echo "⬆️ Updating dms-shell-git $INSTALLED_VERSION → $LATEST_VERSION"
-elif [[ "$CHOICE" == "2" ]]; then
-  echo "🛠️ Force installing dms-shell-git $LATEST_VERSION"
-else
-  echo "❌ Invalid choice"
-  exit 1
+if [[ "$INSTALLED_VERSION" == "$LATEST_VERSION" ]]; then
+  echo "✅ dms-shell-git is already up to date"
+  exit 0
 fi
+
+echo "⬆️ Updating dms-shell-git $INSTALLED_VERSION → $LATEST_VERSION"
 
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR"
 
 echo "📥 Downloading:"
+echo "   $PKG_FILE"
+curl -L --fail -o "$PKG_FILE" "$ASSET_URL"
+
+echo "📦 Installing package..."
+sudo pacman -U --noconfirm "$PKG_FILE"
+
+cd /
+rm -rf "$TMP_DIR"
+
+echo
+echo "✅ dms-shell-git $LATEST_VERSION installed successfully!"
