@@ -16,11 +16,12 @@ jobs:
 
     steps:
       # -------------------------
-      # Enable testing repo + update
+      # Enable testing repos + update
       # -------------------------
-      - name: Setup Arch (with testing)
+      - name: Setup Arch (core-testing + extra-testing)
         run: |
-          echo -e "\n[testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+          echo -e "\n[core-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+          echo -e "\n[extra-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
           pacman -Syyu --noconfirm
 
       # -------------------------
@@ -88,7 +89,6 @@ jobs:
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
-
             CFLAGS+=" -march=x86-64-v3"
 
             cargo build --frozen --release --features default
