@@ -21,14 +21,7 @@ jobs:
       - name: Update base system
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git sudo curl
-
-      # -------------------------
-      # Install runtime deps
-      # -------------------------
-      - name: Install dependencies
-        run: |
-          pacman -S --noconfirm quickshell
+          pacman -S --noconfirm base-devel git sudo curl go quickshell
 
       # -------------------------
       # Create builder user
@@ -47,13 +40,13 @@ jobs:
           pkgname=dms-git
           pkgver=0.0.0
           pkgrel=1
-          pkgdesc="Dank Material Shell (git, x86-64-v3)"
+          pkgdesc="Dank Material Shell (git, GOAMD64=v3)"
           arch=(x86_64)
           url="https://github.com/AvengeMedia/DankMaterialShell"
           license=(GPL-3.0-or-later)
 
           depends=(quickshell)
-          makedepends=(git make gcc)
+          makedepends=(git make go)
 
           provides=(dank-material-shell dms)
           conflicts=(dank-material-shell dms)
@@ -71,15 +64,16 @@ jobs:
           build() {
             cd DankMaterialShell/core
 
-            make \
-              CFLAGS="-O2 -march=x86-64-v3" \
-              CXXFLAGS="-O2 -march=x86-64-v3"
+            # Go x86-64-v3 optimization
+            export GOAMD64=v3
+
+            make
           }
 
           package() {
             cd DankMaterialShell
 
-            install -Dm755 core/dms "$pkgdir/usr/bin/dms"
+            install -Dm755 core/bin/dms "$pkgdir/usr/bin/dms"
 
             mkdir -p "$pkgdir/usr/share/dms"
             cp -r quickshell/* "$pkgdir/usr/share/dms/"
@@ -118,7 +112,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg.outputs.version }}-v3
-          name: dms-git ${{ steps.pkg.outputs.version }} (x86-64-v3)
+          name: dms-git ${{ steps.pkg.outputs.version }} (GOAMD64=v3)
           files: release/*.pkg.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
