@@ -12,19 +12,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/archlinux/archlinux:latest
+      image: archlinux:latest
 
     steps:
       # -------------------------
-      # Base system
+      # Update system
       # -------------------------
       - name: Update base system
         run: |
-          pacman -Syyu --noconfirm
-          pacman -S --noconfirm base-devel git sudo curl tar
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git curl sudo
 
       # -------------------------
-      # Setup CachyOS repo
+      # Add CachyOS repo
       # -------------------------
       - name: Setup CachyOS repo
         run: |
@@ -34,7 +34,17 @@ jobs:
           cd cachyos-repo
           chmod +x cachyos-repo.sh
           yes | ./cachyos-repo.sh
-          pacman -Syyu --noconfirm
+          pacman -Syu --noconfirm
+
+      # -------------------------
+      # Install dependencies
+      # -------------------------
+      - name: Install dependencies
+        run: |
+          pacman -S --noconfirm \
+            cmake ninja cli11 qt6-base qt6-declarative qt6-svg \
+            qt6-wayland qt6-shadertools spirv-tools wayland-protocols \
+            jemalloc libdrm libglvnd libpipewire libxcb mesa pam polkit
 
       # -------------------------
       # Create builder user
@@ -45,26 +55,88 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
       # -------------------------
-      # Install paru
+      # Create PKGBUILD
       # -------------------------
-      - name: Install paru
+      - name: Create PKGBUILD
         run: |
-          pacman -S --noconfirm paru
+          cat > /home/builder/PKGBUILD << 'EOF'
+          pkgname=quickshell-git
+          pkgver=0.0.0
+          pkgrel=1
+          pkgdesc='Flexible toolkit for making desktop shells with QtQuick (git)'
+          arch=(x86_64)
+          url="https://git.outfoxxed.me/quickshell/quickshell"
+          license=(LGPL-3.0-only)
+
+          depends=(
+            gcc-libs glibc hicolor-icon-theme jemalloc libdrm libglvnd
+            libpipewire libxcb mesa pam qt6-base qt6-declarative
+            qt6-svg qt6-wayland wayland
+          )
+
+          makedepends=(
+            cli11 cmake ninja qt6-shadertools spirv-tools
+            wayland-protocols git
+          )
+
+          provides=(quickshell)
+          conflicts=(quickshell)
+
+          source=("git+https://git.outfoxxed.me/quickshell/quickshell.git")
+          sha256sums=('SKIP')
+
+          pkgver() {
+            cd quickshell
+            git describe --long --tags --abbrev=7 | sed 's/^v//;s/-/.r/;s/-/./'
+          }
+
+          build() {
+            cd quickshell
+
+            export CFLAGS="-O2 -pipe"
+            export CXXFLAGS="-O2 -pipe"
+
+            local cmake_options=(
+              -D CMAKE_BUILD_TYPE=Release
+              -D DISTRIBUTOR='Arch Linux'
+              -D CRASH_REPORTER=Off
+              -D CMAKE_INSTALL_PREFIX=/usr
+              -D INSTALL_QML_PREFIX=lib/qt6/qml
+              -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+              -D CMAKE_C_FLAGS_RELEASE="-O2 -DNDEBUG"
+              -D CMAKE_CXX_FLAGS_RELEASE="-O2 -DNDEBUG"
+            )
+
+            cmake -G Ninja -B build -W no-dev "${cmake_options[@]}"
+            cmake --build build
+          }
+
+          package() {
+            cd quickshell
+            DESTDIR="$pkgdir" cmake --install build
+
+            # Force strip
+            strip --strip-all "$pkgdir/usr/bin/quickshell" || true
+
+            install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+          }
+          EOF
 
       # -------------------------
-      # Build quickshell-git
+      # Build package
       # -------------------------
       - name: Build quickshell-git
         run: |
-          su builder -c "paru -S --noconfirm --needed quickshell-git"
+          chown -R builder:builder /home/builder
+          su builder -c "cd ~ && makepkg -s --noconfirm"
 
       # -------------------------
-      # Extract version + prepare release
+      # Detect version + prepare release
       # -------------------------
       - name: Prepare release
         id: pkg
         run: |
-          PKG_PATH=$(ls /home/builder/.cache/paru/clone/quickshell-git/*.pkg.tar.zst)
+          PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
           PKG_FILE=$(basename "$PKG_PATH")
           VERSION=$(echo "$PKG_FILE" | sed -E 's/^quickshell-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
           echo "Detected version: $VERSION"
