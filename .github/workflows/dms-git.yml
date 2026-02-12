@@ -1,4 +1,4 @@
-name: Build dms-git (x86-64-v3)
+name: Build dms-shell-git (x86-64-v3)
 
 permissions:
   contents: write
@@ -37,7 +37,7 @@ jobs:
       - name: Create PKGBUILD
         run: |
           cat > /home/builder/PKGBUILD << 'EOF'
-          pkgname=dms-git
+          pkgname=dms-shell-git
           pkgver=0.0.0
           pkgrel=1
           pkgdesc="Dank Material Shell (git, GOAMD64=v3)"
@@ -48,8 +48,8 @@ jobs:
           depends=(quickshell)
           makedepends=(git make go)
 
-          provides=(dank-material-shell dms)
-          conflicts=(dank-material-shell dms)
+          provides=(dms-shell dms-git)
+          conflicts=(dms-shell dms-git)
 
           source=("git+$url.git")
           sha256sums=('SKIP')
@@ -82,7 +82,7 @@ jobs:
       # -------------------------
       # Build package
       # -------------------------
-      - name: Build dms-git
+      - name: Build dms-shell-git
         run: |
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
@@ -92,11 +92,11 @@ jobs:
       - name: Prepare release
         id: pkg
         run: |
-          PKG_PATH=$(find /home/builder -maxdepth 1 -type f -name "dms-git-*-x86_64.pkg.tar.zst" ! -name "*debug*")
+          PKG_PATH=$(find /home/builder -maxdepth 1 -type f -name "dms-shell-git-*-x86_64.pkg.tar.zst" ! -name "*debug*")
           PKG_FILE=$(basename "$PKG_PATH")
 
-          VERSION=$(echo "$PKG_FILE" | sed -E 's/^dms-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
-          NEW_NAME="dms-git-${VERSION}-x86_64_v3.pkg.tar.zst"
+          VERSION=$(echo "$PKG_FILE" | sed -E 's/^dms-shell-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
+          NEW_NAME="dms-shell-git-${VERSION}-x86_64_v3.pkg.tar.zst"
 
           mkdir release
           cp "$PKG_PATH" "release/$NEW_NAME"
@@ -110,7 +110,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg.outputs.version }}-v3
-          name: dms-git ${{ steps.pkg.outputs.version }} (GOAMD64=v3)
+          name: dms-shell-git ${{ steps.pkg.outputs.version }} (GOAMD64=v3)
           files: release/*.pkg.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
