@@ -30,11 +30,20 @@ RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
 TAG_NAME=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
 echo "Latest release tag: $TAG_NAME"
 
+# Prefer x86_64_v3, fallback to generic
 ASSET_URL=$(echo "$RELEASE_JSON" | jq -r '
   .assets[]
-  | select(.name | test("^quickshell-git-.*-x86_64\\.pkg\\.tar\\.zst$"))
+  | select(.name | test("^quickshell-git-.*-x86_64_v3\\.pkg\\.tar\\.zst$"))
   | .browser_download_url
-')
+' | head -n1)
+
+if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
+  ASSET_URL=$(echo "$RELEASE_JSON" | jq -r '
+    .assets[]
+    | select(.name | test("^quickshell-git-.*-x86_64\\.pkg\\.tar\\.zst$"))
+    | .browser_download_url
+  ' | head -n1)
+fi
 
 if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
   echo "❌ Could not find quickshell package in release $TAG_NAME"
@@ -44,7 +53,7 @@ fi
 PKG_FILE=$(basename "$ASSET_URL")
 
 LATEST_VERSION=$(echo "$PKG_FILE" | sed -E \
-  's/^quickshell-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
+  's/^quickshell-git-(.*)-x86_64(_v3)?\.pkg\.tar\.zst/\1/')
 
 echo "Latest package version: $LATEST_VERSION"
 echo
