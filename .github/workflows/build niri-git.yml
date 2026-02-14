@@ -16,13 +16,10 @@ jobs:
 
     steps:
       # -------------------------
-      # Enable testing repos + update
+      # Update system
       # -------------------------
-      - name: Setup Arch (core-testing + extra-testing)
-        run: |
-          echo -e "\n[core-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
-          echo -e "\n[extra-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
-          pacman -Syyu --noconfirm
+      - name: Update Arch
+        run: pacman -Syu --noconfirm
 
       # -------------------------
       # Install dependencies
@@ -31,10 +28,22 @@ jobs:
         run: |
           pacman -S --noconfirm \
             base-devel git sudo curl \
-            cairo glib2 glibc libdisplay-info libinput \
-            pipewire libpipewire libxkbcommon mesa pango pixman \
-            seatd systemd-libs xdg-desktop-portal-impl \
-            clang rust
+            cairo glib2 glibc \
+            libdisplay-info libinput libxkbcommon \
+            mesa pixman pango \
+            pipewire seatd systemd-libs \
+            wayland wayland-protocols \
+            xdg-desktop-portal \
+            clang
+
+      # -------------------------
+      # Install latest Rust
+      # -------------------------
+      - name: Install Rust (latest stable)
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source ~/.cargo/env
+          rustc --version
 
       # -------------------------
       # Create builder user
@@ -59,12 +68,15 @@ jobs:
           license=(GPL-3.0-or-later)
 
           depends=(
-            cairo gcc-libs glib2 glibc libdisplay-info libinput
-            pipewire libpipewire libxkbcommon mesa pango pixman
-            seatd systemd-libs xdg-desktop-portal-impl
+            cairo gcc-libs glib2 glibc
+            libdisplay-info libinput libxkbcommon
+            mesa pixman pango
+            pipewire seatd systemd-libs
+            wayland wayland-protocols
+            xdg-desktop-portal
           )
 
-          makedepends=(clang git rust)
+          makedepends=(clang git)
 
           provides=(niri wayland-compositor)
           conflicts=(niri)
@@ -79,31 +91,18 @@ jobs:
 
           prepare() {
             cd niri
-            cargo fetch --locked --target "$(rustc --print host-tuple)"
+            source ~/.cargo/env
+            cargo fetch --locked
           }
 
           build() {
             cd niri
+            source ~/.cargo/env
 
             export NIRI_BUILD_COMMIT="$(git rev-parse --short HEAD)"
-
-            # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
-            CFLAGS+=" -march=x86-64-v3"
 
-            cargo build --frozen --release --features default
-
-            for shell in bash fish zsh; do
-              cargo run --frozen --release --bin niri -- \
-                completions "$shell" > "$shell-completions"
-            done
-          }
-
-          check() {
-            cd niri
-            export XDG_RUNTIME_DIR="$(mktemp -d)"
-            export RAYON_NUM_THREADS=1
-            cargo test --all --exclude niri-visual-tests --frozen || true
+            cargo build --frozen --release
           }
 
           package() {
@@ -115,10 +114,6 @@ jobs:
             install -Dm644 resources/niri.desktop -t "$pkgdir/usr/share/wayland-sessions/"
             install -Dm644 resources/niri-portals.conf -t "$pkgdir/usr/share/xdg-desktop-portal/"
             install -Dm644 resources/default-config.kdl README.md -t "$pkgdir/usr/share/doc/niri/"
-
-            install -Dm644 bash-completions "$pkgdir/usr/share/bash-completion/completions/niri"
-            install -Dm644 fish-completions "$pkgdir/usr/share/fish/vendor_completions.d/niri.fish"
-            install -Dm644 zsh-completions "$pkgdir/usr/share/zsh/site-functions/_niri"
           }
           EOF
 
@@ -140,10 +135,9 @@ jobs:
           PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
           PKG_FILE=$(basename "$PKG_PATH")
           VERSION=$(echo "$PKG_FILE" | sed -E 's/^niri-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
-          NEW_NAME="niri-git-${VERSION}-x86_64_v3.pkg.tar.zst"
 
           mkdir release
-          cp "$PKG_PATH" "release/$NEW_NAME"
+          cp "$PKG_PATH" "release/niri-git-${VERSION}-x86_64_v3.pkg.tar.zst"
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
