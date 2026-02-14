@@ -66,7 +66,7 @@ jobs:
           provides=(niri)
           conflicts=(niri niri-bin)
 
-          options=(!debug !lto !strip)
+          options=(!debug)   # allow strip + LTO
 
           source=("niri::git+$url.git")
           b2sums=('SKIP')
@@ -79,7 +79,19 @@ jobs:
 
           prepare() {
             cd niri
+
             export CARGO_HOME="$srcdir/niri/.cargo"
+
+            # Optimize for size + performance
+            mkdir -p .cargo
+            cat > .cargo/config.toml <<CONFIG
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+CONFIG
+
             cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
           }
 
@@ -91,7 +103,6 @@ jobs:
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
-            CFLAGS+=" -march=x86-64-v3"
 
             cargo build --frozen --release
           }
