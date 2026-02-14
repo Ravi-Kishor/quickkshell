@@ -5,8 +5,6 @@ permissions:
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 */12 * * *"
 
 jobs:
   build:
@@ -66,7 +64,8 @@ jobs:
           provides=(niri)
           conflicts=(niri niri-bin)
 
-          options=(!debug !lto !strip)
+          # allow stripping, disable debug package
+          options=(!debug)
 
           source=("niri::git+$url.git")
           b2sums=('SKIP')
@@ -80,7 +79,7 @@ jobs:
           prepare() {
             cd niri
             export CARGO_HOME="$srcdir/niri/.cargo"
-            cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+            cargo fetch --locked
           }
 
           build() {
