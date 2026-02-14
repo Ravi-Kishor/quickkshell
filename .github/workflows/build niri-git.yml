@@ -27,23 +27,12 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -S --noconfirm \
-            base-devel git sudo curl \
-            cairo glib2 glibc \
-            libdisplay-info libinput libxkbcommon \
-            mesa pixman pango \
-            pipewire seatd systemd-libs \
+            base-devel git sudo \
+            cairo glib2 libdisplay-info libinput libpipewire libxkbcommon \
+            mesa pango pixman seatd \
             wayland wayland-protocols \
             xdg-desktop-portal \
-            clang
-
-      # -------------------------
-      # Install latest Rust
-      # -------------------------
-      - name: Install Rust (latest stable)
-        run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
-          source ~/.cargo/env
-          rustc --version
+            clang rust
 
       # -------------------------
       # Create builder user
@@ -60,47 +49,49 @@ jobs:
         run: |
           cat > /home/builder/PKGBUILD << 'EOF'
           pkgname=niri-git
-          pkgver=0.0.0
+          pkgver=0
           pkgrel=1
-          pkgdesc="A scrollable-tiling Wayland compositor (git, x86-64-v3)"
+          pkgdesc="Scrollable-tiling Wayland compositor (git, x86-64-v3)"
           arch=(x86_64)
-          url="https://github.com/YaLTeR/niri"
+          url="https://github.com/niri-wm/niri"
           license=(GPL-3.0-or-later)
 
           depends=(
-            cairo gcc-libs glib2 glibc
-            libdisplay-info libinput libxkbcommon
-            mesa pixman pango
-            pipewire seatd systemd-libs
-            wayland wayland-protocols
-            xdg-desktop-portal
+            cairo glib2 libdisplay-info libinput libpipewire libxkbcommon
+            mesa pango pixman seatd
           )
 
-          makedepends=(clang git)
+          makedepends=(clang rust git)
 
-          provides=(niri wayland-compositor)
-          conflicts=(niri)
+          provides=(niri)
+          conflicts=(niri niri-bin)
 
-          source=("git+$url.git")
-          sha512sums=('SKIP')
+          options=(!debug !lto !strip)
+
+          source=("niri::git+$url.git")
+          b2sums=('SKIP')
 
           pkgver() {
             cd niri
-            git describe --long --tags --abbrev=7 | sed 's/^v//;s/-/.r/;s/-/./'
+            git describe --long --tags --abbrev=7 | \
+              sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//'
           }
 
           prepare() {
             cd niri
-            source ~/.cargo/env
-            cargo fetch --locked
+            export CARGO_HOME="$srcdir/niri/.cargo"
+            cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
           }
 
           build() {
             cd niri
-            source ~/.cargo/env
 
-            export NIRI_BUILD_COMMIT="$(git rev-parse --short HEAD)"
+            export CARGO_HOME="$srcdir/niri/.cargo"
+            export CARGO_TARGET_DIR=target
+
+            # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
+            CFLAGS+=" -march=x86-64-v3"
 
             cargo build --frozen --release
           }
@@ -108,12 +99,12 @@ jobs:
           package() {
             cd niri
 
-            install -Dm755 target/release/niri "$pkgdir/usr/bin/niri"
-            install -Dm755 resources/niri-session "$pkgdir/usr/bin/niri-session"
-            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
+            install -Dm755 target/release/niri -t "$pkgdir/usr/bin/"
+            install -Dm755 resources/niri-session -t "$pkgdir/usr/bin/"
+            install -Dm644 resources/default-config.kdl -t "$pkgdir/usr/share/doc/niri/"
             install -Dm644 resources/niri.desktop -t "$pkgdir/usr/share/wayland-sessions/"
             install -Dm644 resources/niri-portals.conf -t "$pkgdir/usr/share/xdg-desktop-portal/"
-            install -Dm644 resources/default-config.kdl README.md -t "$pkgdir/usr/share/doc/niri/"
+            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
           }
           EOF
 
