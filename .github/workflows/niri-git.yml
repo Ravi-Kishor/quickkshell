@@ -13,15 +13,9 @@ jobs:
       image: archlinux:latest
 
     steps:
-      # -------------------------
-      # Update system
-      # -------------------------
       - name: Update Arch
         run: pacman -Syu --noconfirm
 
-      # -------------------------
-      # Install dependencies
-      # -------------------------
       - name: Install dependencies
         run: |
           pacman -S --noconfirm \
@@ -32,17 +26,11 @@ jobs:
             xdg-desktop-portal \
             clang rust
 
-      # -------------------------
-      # Create builder user
-      # -------------------------
       - name: Create builder user
         run: |
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-      # -------------------------
-      # Create PKGBUILD
-      # -------------------------
       - name: Create PKGBUILD
         run: |
           cat > /home/builder/PKGBUILD << 'EOF'
@@ -87,13 +75,9 @@ jobs:
             export CARGO_HOME="$srcdir/niri/.cargo"
             export CARGO_TARGET_DIR=target
 
-            # Force GNU linker and disable lld completely
+            # Force GNU linker (no lld)
             mkdir -p .cargo
-            cat > .cargo/config.toml <<CONFIG
-[target.x86_64-unknown-linux-gnu]
-linker = "gcc"
-rustflags = []
-CONFIG
+            printf '[target.x86_64-unknown-linux-gnu]\nlinker = "gcc"\n' > .cargo/config.toml
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
@@ -104,7 +88,6 @@ CONFIG
 
           package() {
             cd niri
-
             install -Dm755 target/release/niri -t "$pkgdir/usr/bin/"
             install -Dm755 resources/niri-session -t "$pkgdir/usr/bin/"
             install -Dm644 resources/default-config.kdl -t "$pkgdir/usr/share/doc/niri/"
@@ -116,16 +99,10 @@ CONFIG
 
           chown -R builder:builder /home/builder
 
-      # -------------------------
-      # Build package
-      # -------------------------
       - name: Build niri-git
         run: |
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
-      # -------------------------
-      # Upload artifact
-      # -------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
