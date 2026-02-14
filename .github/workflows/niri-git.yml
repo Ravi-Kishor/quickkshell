@@ -15,45 +15,24 @@ jobs:
       image: archlinux:latest
 
     steps:
-      # -------------------------
-      # Enable testing repos
-      # -------------------------
-      - name: Enable testing repos
-        run: |
-          echo -e "\n[core-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
-          echo -e "\n[extra-testing]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
-
-      # -------------------------
-      # Full system upgrade
-      # -------------------------
       - name: Update system
-        run: pacman -Syyu --noconfirm
+        run: pacman -Syu --noconfirm
 
-      # -------------------------
-      # Install dependencies
-      # -------------------------
       - name: Install dependencies
         run: |
           pacman -S --noconfirm \
             base-devel git sudo \
             cairo glib2 libdisplay-info libinput libpipewire libxkbcommon \
-            mesa pango pixman seatd \
+            mesa pango pixman seatd systemd-libs \
             wayland wayland-protocols \
             xdg-desktop-portal \
-            pipewire \
             clang rust
 
-      # -------------------------
-      # Create builder user
-      # -------------------------
       - name: Create builder user
         run: |
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-      # -------------------------
-      # Create PKGBUILD
-      # -------------------------
       - name: Create PKGBUILD
         run: |
           cat > /home/builder/PKGBUILD << 'EOF'
@@ -62,17 +41,18 @@ jobs:
           pkgrel=1
           pkgdesc="Scrollable-tiling Wayland compositor (git)"
           arch=(x86_64)
-          url="https://github.com/niri-wm/niri"
+          url="https://github.com/YaLTeR/niri"
           license=(GPL-3.0-or-later)
 
           depends=(
-            cairo glib2 libdisplay-info libinput libpipewire libxkbcommon
-            mesa pango pixman seatd pipewire
+            cairo glib2 libdisplay-info libinput libpipewire
+            libxkbcommon mesa pango pixman seatd systemd-libs
+            xdg-desktop-portal
           )
 
           makedepends=(clang rust git)
 
-          provides=(niri)
+          provides=(niri wayland-compositor)
           conflicts=(niri niri-bin)
 
           options=(!debug)  # allow strip
@@ -82,46 +62,34 @@ jobs:
 
           pkgver() {
             cd niri
-            git describe --long --tags --abbrev=7 | \
-              sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//'
-          }
-
-          prepare() {
-            cd niri
-            export CARGO_HOME="$srcdir/niri/.cargo"
-            cargo fetch --locked
+            git describe --long --tags --abbrev=7 --exclude='*[a-zA-Z][a-zA-Z]*' \
+              | sed -E 's/^[^0-9]*//;s/([^-]*-g)/r\1/;s/-/./g'
           }
 
           build() {
             cd niri
-            export CARGO_HOME="$srcdir/niri/.cargo"
-            export CARGO_TARGET_DIR=target
-            cargo build --frozen --release
+            cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+            cargo build --frozen --release --features default
           }
 
           package() {
             cd niri
+
             install -Dm755 target/release/niri -t "$pkgdir/usr/bin/"
             install -Dm755 resources/niri-session -t "$pkgdir/usr/bin/"
-            install -Dm644 resources/default-config.kdl -t "$pkgdir/usr/share/doc/niri/"
+            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
             install -Dm644 resources/niri.desktop -t "$pkgdir/usr/share/wayland-sessions/"
             install -Dm644 resources/niri-portals.conf -t "$pkgdir/usr/share/xdg-desktop-portal/"
-            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
+            install -Dm644 resources/default-config.kdl README.md -t "$pkgdir/usr/share/doc/niri/"
           }
           EOF
 
           chown -R builder:builder /home/builder
 
-      # -------------------------
-      # Build package
-      # -------------------------
       - name: Build package
         run: |
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
-      # -------------------------
-      # Prepare release
-      # -------------------------
       - name: Prepare release
         id: pkg
         run: |
@@ -134,9 +102,6 @@ jobs:
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      # Create GitHub Release
-      # -------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
