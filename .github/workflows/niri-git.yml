@@ -54,7 +54,7 @@ jobs:
           provides=(niri)
           conflicts=(niri niri-bin)
 
-          options=(!debug)   # allow strip + LTO
+          options=(!debug)  # allow strip
 
           source=("niri::git+$url.git")
           b2sums=('SKIP')
@@ -73,8 +73,12 @@ jobs:
 
           build() {
             cd niri
+
             export CARGO_HOME="$srcdir/niri/.cargo"
             export CARGO_TARGET_DIR=target
+
+            # Force GNU linker (fix libspa link error)
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=gcc
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
@@ -84,6 +88,7 @@ jobs:
 
           package() {
             cd niri
+
             install -Dm755 target/release/niri -t "$pkgdir/usr/bin/"
             install -Dm755 resources/niri-session -t "$pkgdir/usr/bin/"
             install -Dm644 resources/default-config.kdl -t "$pkgdir/usr/share/doc/niri/"
