@@ -1,10 +1,12 @@
-name: Build niri-git (CachyOS)
+name: Build niri-git (x86-64-v3)
 
 permissions:
   contents: write
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
 
 jobs:
   build:
@@ -14,25 +16,10 @@ jobs:
 
     steps:
       # -------------------------
-      # Base update
+      # Update system
       # -------------------------
-      - name: Update base system
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel git curl sudo
-
-      # -------------------------
-      # Add CachyOS repo
-      # -------------------------
-      - name: Setup CachyOS repo
-        run: |
-          pacman-key --init
-          curl -L https://mirror.cachyos.org/cachyos-repo.tar.xz -o cachyos-repo.tar.xz
-          tar -xf cachyos-repo.tar.xz
-          cd cachyos-repo
-          chmod +x cachyos-repo.sh
-          yes | ./cachyos-repo.sh
-          pacman -Syu --noconfirm
+      - name: Update Arch
+        run: pacman -Syu --noconfirm
 
       # -------------------------
       # Install dependencies
@@ -40,10 +27,11 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -S --noconfirm \
+            base-devel git sudo \
             cairo glib2 libdisplay-info libinput libpipewire libxkbcommon \
-            mesa pango pixman seatd systemd-libs \
+            mesa pango pixman seatd \
             wayland wayland-protocols \
-            xdg-desktop-portal pipewire \
+            xdg-desktop-portal \
             clang rust
 
       # -------------------------
@@ -63,63 +51,95 @@ jobs:
           pkgname=niri-git
           pkgver=0
           pkgrel=1
-          pkgdesc="Scrollable-tiling Wayland compositor (git)"
+          pkgdesc="Scrollable-tiling Wayland compositor (git, x86-64-v3)"
           arch=(x86_64)
-          url="https://github.com/YaLTeR/niri"
+          url="https://github.com/niri-wm/niri"
           license=(GPL-3.0-or-later)
 
           depends=(
-            cairo glib2 libdisplay-info libinput libpipewire
-            libxkbcommon mesa pango pixman seatd systemd-libs
-            xdg-desktop-portal pipewire
+            cairo glib2 libdisplay-info libinput libpipewire libxkbcommon
+            mesa pango pixman seatd
           )
 
           makedepends=(clang rust git)
 
           provides=(niri)
-          conflicts=(niri)
+          conflicts=(niri niri-bin)
 
-          options=(!debug)
+          options=(!debug !lto !strip)
 
           source=("niri::git+$url.git")
-          sha256sums=('SKIP')
+          b2sums=('SKIP')
 
           pkgver() {
             cd niri
-            git describe --long --tags --abbrev=7 \
-              | sed 's/^v//;s/-/.r/;s/-/./'
+            git describe --long --tags --abbrev=7 | \
+              sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//'
+          }
+
+          prepare() {
+            cd niri
+            export CARGO_HOME="$srcdir/niri/.cargo"
+            cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
           }
 
           build() {
             cd niri
-            cargo fetch --locked
+
+            export CARGO_HOME="$srcdir/niri/.cargo"
+            export CARGO_TARGET_DIR=target
+
+            # x86-64-v3 optimization
+            export RUSTFLAGS="-C target-cpu=x86-64-v3"
+            CFLAGS+=" -march=x86-64-v3"
+
             cargo build --frozen --release
           }
 
           package() {
             cd niri
+
             install -Dm755 target/release/niri -t "$pkgdir/usr/bin/"
             install -Dm755 resources/niri-session -t "$pkgdir/usr/bin/"
-            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
+            install -Dm644 resources/default-config.kdl -t "$pkgdir/usr/share/doc/niri/"
             install -Dm644 resources/niri.desktop -t "$pkgdir/usr/share/wayland-sessions/"
             install -Dm644 resources/niri-portals.conf -t "$pkgdir/usr/share/xdg-desktop-portal/"
-            install -Dm644 resources/default-config.kdl README.md -t "$pkgdir/usr/share/doc/niri/"
+            install -Dm644 resources/niri{.service,-shutdown.target} -t "$pkgdir/usr/lib/systemd/user/"
           }
           EOF
+
+          chown -R builder:builder /home/builder
 
       # -------------------------
       # Build package
       # -------------------------
       - name: Build niri-git
         run: |
-          chown -R builder:builder /home/builder
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
       # -------------------------
-      # Upload artifact
+      # Prepare release
       # -------------------------
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Prepare release
+        id: pkg
+        run: |
+          PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
+          PKG_FILE=$(basename "$PKG_PATH")
+          VERSION=$(echo "$PKG_FILE" | sed -E 's/^niri-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
+
+          mkdir release
+          cp "$PKG_PATH" "release/niri-git-${VERSION}-x86_64_v3.pkg.tar.zst"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # Create GitHub Release
+      # -------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: niri-git
-          path: /home/builder/*.pkg.tar.zst
+          tag_name: ${{ steps.pkg.outputs.version }}-v3
+          name: niri-git ${{ steps.pkg.outputs.version }} (x86-64-v3)
+          files: release/*.pkg.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
