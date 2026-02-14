@@ -64,7 +64,6 @@ jobs:
           provides=(niri)
           conflicts=(niri niri-bin)
 
-          # allow stripping, disable debug package
           options=(!debug)
 
           source=("niri::git+$url.git")
@@ -87,6 +86,14 @@ jobs:
 
             export CARGO_HOME="$srcdir/niri/.cargo"
             export CARGO_TARGET_DIR=target
+
+            # Force GNU linker and disable lld completely
+            mkdir -p .cargo
+            cat > .cargo/config.toml <<CONFIG
+[target.x86_64-unknown-linux-gnu]
+linker = "gcc"
+rustflags = []
+CONFIG
 
             # x86-64-v3 optimization
             export RUSTFLAGS="-C target-cpu=x86-64-v3"
@@ -117,28 +124,10 @@ jobs:
           su builder -c "cd ~ && makepkg -s --noconfirm"
 
       # -------------------------
-      # Prepare release
+      # Upload artifact
       # -------------------------
-      - name: Prepare release
-        id: pkg
-        run: |
-          PKG_PATH=$(ls /home/builder/*.pkg.tar.zst)
-          PKG_FILE=$(basename "$PKG_PATH")
-          VERSION=$(echo "$PKG_FILE" | sed -E 's/^niri-git-(.*)-x86_64\.pkg\.tar\.zst/\1/')
-
-          mkdir release
-          cp "$PKG_PATH" "release/niri-git-${VERSION}-x86_64_v3.pkg.tar.zst"
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      # -------------------------
-      # Create GitHub Release
-      # -------------------------
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.pkg.outputs.version }}-v3
-          name: niri-git ${{ steps.pkg.outputs.version }} (x86-64-v3)
-          files: release/*.pkg.tar.zst
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: niri-git
+          path: /home/builder/*.pkg.tar.zst
